@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Segmented Soller Explorer</title>
+<style>
+:root {
+  --bg: #ffffff; --surface: #f2f5fa; --ink: #262626; --muted: #666a70; --grid: #e3e6eb; --axis: #b7bcc4;
+  --blue: #4472C4; --blue-fill: rgba(68,114,196,0.88); --navy: #1F3864; --orange-fill: rgba(237,125,49,0.55);
+  --orange-dark: #C55A11; --gray: #7F7F7F; --focus: #2F5597; --unit-fill: #DAE3F3; --blade: #1F3864;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161b; --surface: #1d2129; --ink: #e9eaec; --muted: #a3a8b0; --grid: #2b303a; --axis: #4a505c;
+    --blue: #6E95DB; --blue-fill: rgba(110,149,219,0.85); --navy: #C9D8F2; --orange-fill: rgba(240,138,75,0.50);
+    --orange-dark: #F4B183; --gray: #A0A0A0; --focus: #8FAADC; --unit-fill: #2a3550; --blade: #9fb8e6;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14161b; --surface: #1d2129; --ink: #e9eaec; --muted: #a3a8b0; --grid: #2b303a; --axis: #4a505c;
+  --blue: #6E95DB; --blue-fill: rgba(110,149,219,0.85); --navy: #C9D8F2; --orange-fill: rgba(240,138,75,0.50);
+  --orange-dark: #F4B183; --gray: #A0A0A0; --focus: #8FAADC; --unit-fill: #2a3550; --blade: #9fb8e6;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font-size: 16px; line-height: 1.4;
+  font-family: Calibri, Carlito, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+main { max-width: 1060px; margin: 0 auto; padding: 10px 16px 14px; }
+#strip { display: block; width: 100%; height: 104px; }
+.panel {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; margin-top: 4px;
+  background: var(--surface); border-radius: 12px; padding: 12px 16px;
+}
+.ctl label { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; color: var(--muted); }
+.ctl label b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ctl input { width: 100%; margin: 6px 0 0; accent-color: var(--blue); }
+.head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; margin: 14px 0 6px; }
+h2 { font-size: 17px; margin: 0; }
+h2 span { font-size: 14px; font-weight: 400; color: var(--muted); margin-left: 6px; }
+.row { display: flex; gap: 8px; }
+button {
+  font: inherit; font-size: 14px; border: 1px solid var(--axis); background: var(--bg); color: var(--ink);
+  border-radius: 999px; padding: 5px 13px; cursor: pointer;
+}
+button:hover { border-color: var(--blue); }
+button.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13.5px; color: var(--muted); margin-bottom: 4px; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.sw { display: inline-block; width: 26px; height: 12px; }
+.plot { position: relative; height: 330px; }
+canvas { display: block; width: 100%; height: 100%; }
+#readout {
+  position: absolute; top: 8px; right: 10px; display: none; pointer-events: none; font-size: 13px; line-height: 1.35;
+  background: var(--bg); border: 1px solid var(--grid); border-radius: 8px; padding: 6px 9px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+#readout b { color: var(--ink); font-weight: 600; }
+@media (max-width: 640px) { .panel { grid-template-columns: 1fr; } .plot { height: 260px; } }
+</style>
+</head>
+<body>
+<main>
+  <svg id="strip" role="img" aria-label="Layout of the two units to scale"></svg>
+
+  <section class="panel" aria-label="Parameters">
+    <div class="ctl"><label for="sG">Gap G <b id="vG"></b></label>
+      <input type="range" id="sG" min="0" max="3000" step="1" value="1130"></div>
+    <div class="ctl"><label for="sl">Unit length ℓ <b id="vl"></b></label>
+      <input type="range" id="sl" min="20" max="500" step="1" value="160"></div>
+  </section>
+
+  <div class="head">
+    <h2>Transmission T(θ)<span>d = 0.725 mm</span></h2>
+    <div class="row" role="group" aria-label="θ range">
+      <button class="on" data-z="1">Full range</button><button data-z="4">Centre ×4</button>
+    </div>
+  </div>
+  <div class="legend">
+    <span><i class="sw" style="background:var(--blue-fill)"></i>n = 0: same channel (= continuous collimator of length L)</span>
+    <span><i class="sw" style="background:var(--orange-fill)"></i>n ≠ 0: crosstalk</span>
+    <span><svg class="sw" viewBox="0 0 26 12" aria-hidden="true"><line x1="1" y1="6" x2="25" y2="6" stroke="var(--navy)" stroke-width="3"/></svg>comb average ⟨T⟩ = T₁²</span>
+    <span><svg class="sw" viewBox="0 0 26 12" aria-hidden="true"><line x1="1" y1="6" x2="25" y2="6" stroke="var(--gray)" stroke-width="1.6" stroke-dasharray="5 3"/></svg>one unit T₁ = 1 − |θ|/α₁ (envelope)</span>
+  </div>
+  <div class="plot" id="box">
+    <canvas id="cv" role="img" aria-label="Exact transmission T of theta, split into the same-channel part and crosstalk"></canvas>
+    <div id="readout"></div>
+  </div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const d = 0.725;                                    // blade spacing, mm (fixed)
+  const state = { G: 1130, l: 160, zoom: 1 };
+  let hoverX = null, plot = null;
+
+  // ---------------- physics (mm, rad): T = sum_n max(0, 1 - a - |s - n|), a = |th| l/d, s = th D/d
+  function geom() {
+    const l = state.l, G = state.G, D = l + G, L = D + l;
+    let N = 0; while ((N + 1) * l < D * (1 - 1e-12)) N++;          // crosstalk orders |n| < D/l
+    return { l, G, D, L, a1: d / l, N };
+  }
+  function T(th, m) {
+    const a = Math.abs(th) * m.l / d;
+    if (a >= 1) return 0;
+    const s = th * m.D / d, f = s - Math.floor(s);
+    return Math.max(0, 1 - a - f) + Math.max(0, f - a);
+  }
+  const L0 = (th, m) => Math.max(0, 1 - Math.abs(th) * m.L / d);  // n = 0 term
+  const T1 = (th, m) => Math.max(0, 1 - Math.abs(th) / m.a1);     // one unit
+
+  // ---------------- helpers
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  function fit(cv) {
+    const r = cv.getBoundingClientRect(), k = window.devicePixelRatio || 1;
+    cv.width = Math.max(1, Math.round(r.width * k)); cv.height = Math.max(1, Math.round(r.height * k));
+    const g = cv.getContext('2d'); g.setTransform(k, 0, 0, k, 0, 0);
+    return { g, W: r.width, H: r.height };
+  }
+  function niceStep(span, target) {
+    const raw = span / target, p = Math.pow(10, Math.floor(Math.log10(raw))), q = raw / p;
+    return (q < 1.5 ? 1 : q < 3 ? 2 : q < 7 ? 5 : 10) * p;
+  }
+
+  // ---------------- 1. layout strip (to scale along z)
+  function drawStrip(m) {
+    const svg = $('strip'), W = Math.max(280, svg.clientWidth || 1000), x0 = 16, x1 = W - 16;
+    const X = z => x0 + z / m.L * (x1 - x0), yT = 28, yB = 72, muted = css('--muted');
+    svg.setAttribute('viewBox', `0 0 ${W} 104`);
+    let s = '';
+    [[0, 'Unit 1'], [m.D, 'Unit 2']].forEach(([z, name]) => {
+      const xa = X(z), w = Math.max(X(z + m.l) - xa, 3);
+      s += `<rect x="${xa.toFixed(1)}" y="${yT}" width="${w.toFixed(1)}" height="${yB - yT}" fill="var(--unit-fill)"/>`;
+      for (let k = 0; k <= 6; k++) {
+        const y = yT + (yB - yT) * k / 6;
+        s += `<line x1="${xa.toFixed(1)}" x2="${(xa + w).toFixed(1)}" y1="${y}" y2="${y}" stroke="var(--blade)" stroke-width="1.6"/>`;
+      }
+      s += `<text x="${(xa + w / 2).toFixed(1)}" y="${yT - 9}" text-anchor="middle" font-size="15" font-weight="600" fill="var(--navy)">${name}</text>`;
+    });
+    const ga = X(m.l), gb = X(m.D);
+    if (m.G > 0 && gb - ga > 150) s += `<text x="${((ga + gb) / 2).toFixed(1)}" y="${(yT + yB) / 2 + 5}" text-anchor="middle" font-size="15" font-style="italic" fill="${muted}">free flight, G = ${m.G} mm</text>`;
+    s += `<line x1="${x0}" x2="${x1}" y1="86" y2="86" stroke="${muted}"/><line x1="${x0}" x2="${x0}" y1="81" y2="91" stroke="${muted}"/>` +
+         `<line x1="${x1}" x2="${x1}" y1="81" y2="91" stroke="${muted}"/>` +
+         `<text x="${W / 2}" y="102" text-anchor="middle" font-size="14" fill="${muted}">L = ${Math.round(m.L)} mm</text>`;
+    svg.innerHTML = s;
+  }
+
+  // ---------------- 3. transmission plot
+  function samples(m, lo, hi, W) {                     // pixel grid + exact apexes/zeros of every Lambda_n
+    const xs = [], K = Math.max(400, Math.round(W * 3)), add = v => { if (v > lo && v < hi) xs.push(v); };
+    for (let i = 0; i <= K; i++) xs.push(lo + (hi - lo) * i / K);
+    for (let n = 1; n <= m.N; n++) for (const sg of [1, -1]) {
+      add(sg * n * d / m.D); add(sg * (n - 1) * d / (m.D - m.l)); add(sg * (n + 1) * d / (m.D + m.l));
+    }
+    [0, d / m.L, -d / m.L, m.a1, -m.a1].forEach(add);
+    return xs.sort((p, q) => p - q);
+  }
+  function drawPlot() {
+    const m = geom(), { g, W, H } = fit($('cv'));
+    g.clearRect(0, 0, W, H);
+    const span = 1.08 * m.a1 / state.zoom, box = { x0: 58, x1: W - 12, y0: 10, y1: H - 44 };
+    const X = v => box.x0 + (v / 1e3 + span) / (2 * span) * (box.x1 - box.x0);   // v in mrad
+    const Y = v => box.y1 - v / 1.05 * (box.y1 - box.y0);
+    // axes
+    g.font = '12px ' + getComputedStyle(document.body).fontFamily;
+    g.lineWidth = 1; g.strokeStyle = css('--grid'); g.fillStyle = css('--muted');
+    g.textAlign = 'right'; g.textBaseline = 'middle';
+    for (let v = 0; v <= 1.0001; v += 0.25) {
+      g.beginPath(); g.moveTo(box.x0, Math.round(Y(v)) + 0.5); g.lineTo(box.x1, Math.round(Y(v)) + 0.5); g.stroke();
+      g.fillText(v.toFixed(2), box.x0 - 6, Y(v));
+    }
+    const st = niceStep(2 * span * 1e3, W < 560 ? 6 : 10), dec = Math.max(0, -Math.floor(Math.log10(st) + 1e-9));
+    g.textAlign = 'center'; g.textBaseline = 'top';
+    for (let v = Math.ceil(-span * 1e3 / st - 1e-9) * st; v <= span * 1e3 + 1e-9; v += st) {
+      const t = Math.abs(v) < st / 1e6 ? 0 : v;
+      g.fillText((t < 0 ? '−' : '') + Math.abs(t).toFixed(dec), X(v), box.y1 + 6);
+    }
+    g.strokeStyle = css('--axis'); g.beginPath(); g.moveTo(box.x0, box.y1 + 0.5); g.lineTo(box.x1, box.y1 + 0.5); g.stroke();
+    g.fillText('θ (mrad)', (box.x0 + box.x1) / 2, box.y1 + 24);
+    g.save(); g.translate(11, (box.y0 + box.y1) / 2); g.rotate(-Math.PI / 2); g.textBaseline = 'middle';
+    g.fillText('T(θ)', 0, 0); g.restore();
+    // crosstalk (T - Lambda0, orange) stacked on Lambda0 (blue), outline of T
+    const th = samples(m, -span, span, box.x1 - box.x0), P = th.map(t => [X(t * 1e3), Y(T(t, m)), Y(L0(t, m))]);
+    g.beginPath(); P.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]));
+    for (let i = P.length - 1; i >= 0; i--) g.lineTo(P[i][0], P[i][2]);
+    g.closePath(); g.fillStyle = css('--orange-fill'); g.fill();
+    g.beginPath(); g.moveTo(P[0][0], Y(0)); P.forEach(p => g.lineTo(p[0], p[2])); g.lineTo(P[P.length - 1][0], Y(0));
+    g.closePath(); g.fillStyle = css('--blue-fill'); g.fill();
+    g.lineJoin = 'round'; g.beginPath(); P.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]));
+    g.strokeStyle = css('--orange-dark'); g.lineWidth = 1.1; g.stroke();
+    const line = (fn, color, w, dash) => {
+      g.beginPath(); th.forEach((t, i) => { const x = X(t * 1e3), y = Y(fn(t)); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+      g.setLineDash(dash); g.strokeStyle = color; g.lineWidth = w; g.stroke(); g.setLineDash([]);
+    };
+    line(t => T1(t, m), css('--gray'), 1.6, [6, 4]);
+    line(t => T1(t, m) ** 2, css('--navy'), 2.6, []);
+    plot = { m, X, Y, box, span };
+    // hover read-out
+    const ro = $('readout');
+    if (hoverX === null || hoverX < box.x0 || hoverX > box.x1) { ro.style.display = 'none'; return; }
+    const t = ((hoverX - box.x0) / (box.x1 - box.x0) * 2 - 1) * span, x = X(t * 1e3);
+    g.strokeStyle = css('--muted'); g.lineWidth = 1; g.setLineDash([3, 3]);
+    g.beginPath(); g.moveTo(x + 0.5, box.y0); g.lineTo(x + 0.5, box.y1); g.stroke(); g.setLineDash([]);
+    g.fillStyle = css('--orange-dark'); g.beginPath(); g.arc(x, Y(T(t, m)), 3.5, 0, 2 * Math.PI); g.fill();
+    ro.style.display = 'block';
+    ro.innerHTML = `θ = <b>${(t * 1e3).toFixed(3)}</b> mrad<br>T = <b>${T(t, m).toFixed(3)}</b> &nbsp;(n = 0: ${L0(t, m).toFixed(3)})` +
+      `<br>⟨T⟩ = ${(T1(t, m) ** 2).toFixed(3)} &nbsp;T₁ = ${T1(t, m).toFixed(3)}`;
+  }
+
+  // ---------------- 2. controls and events
+  function update() {
+    $('vG').textContent = state.G + ' mm'; $('vl').textContent = state.l + ' mm';
+    drawStrip(geom()); drawPlot();
+  }
+  let raf = 0;
+  const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; update(); }); };
+  $('sG').addEventListener('input', e => { state.G = +e.target.value; schedule(); });
+  $('sl').addEventListener('input', e => { state.l = +e.target.value; schedule(); });
+  document.querySelectorAll('[data-z]').forEach(b => b.addEventListener('click', () => {
+    state.zoom = +b.dataset.z;
+    document.querySelectorAll('[data-z]').forEach(x => x.classList.toggle('on', x === b)); drawPlot();
+  }));
+  const cv = $('cv');
+  cv.addEventListener('pointermove', e => { hoverX = e.clientX - cv.getBoundingClientRect().left; drawPlot(); });
+  cv.addEventListener('pointerleave', () => { hoverX = null; drawPlot(); });
+  new ResizeObserver(update).observe($('box'));
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', update);
+  update();
+})();
+</script>
+</body>
+</html>
